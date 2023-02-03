@@ -1,11 +1,17 @@
-import { MongoClient } from "mongodb";
+
+import {connectDatabase,insertDocument,getAllDocuments} from '../../../helpers/db-utils';
 
 async function handler(req, res) {
 	const eventId = req.query.eventId;
 
-	const client = await MongoClient.connect(
-		"mongodb+srv://rashad004:rashad004@cluster0.4ntcauu.mongodb.net/events?retryWrites=true&w=majority"
-	);
+	let client;
+
+	try {
+		client = await connectDatabase();
+	} catch (e) {
+		res.status(500).json({ message: "Connecting To DataBase Failed" });
+		return;
+	}
 
 	if (req.method === "POST") {
 		//add server side validation
@@ -20,6 +26,7 @@ async function handler(req, res) {
 			text.trim() === ""
 		) {
 			res.status(422).json({ message: "Invalid Input" });
+			client.close();
 			return;
 		}
 
@@ -29,24 +36,24 @@ async function handler(req, res) {
 			text,
 			eventId,
 		};
-		const db = client.db();
-		const result = await db.collection("comments").insertOne(newComment);
-		console.log(result);
-
-		newComment.id = result.insertedId;
-		res.status(201).json({ message: "Added Comments", comment: newComment });
+		let result;
+		try {
+			result = await insertDocument(client, "comments", newComment);
+			newComment._id = result.insertedId;
+			res.status(201).json({ message: "Added Comments", comment: newComment });
+		} catch (e) {
+			res.status(500).json({ message: "Inserting Comment To DataBase Failed" });
+		}
 	}
 	if (req.method === "GET") {
-		const db = client.db();
-		const documents = await db
-			.collection("comments")
-			.find()
-			.sort({ _id: -1 })
-			.toArray();
-		res.status(200).json({ comments: documents });
+		try {
+			const documents = await getAllDocuments(client, "comments", { _id: -1 });
+			res.status(200).json({ comments: documents });
+		} catch (e) {
+			res.status(500).json({ message: "SomeThing Wrong while Fetching" });
+		}
 	}
 	client.close();
 }
 
 export default handler;
- 
